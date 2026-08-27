@@ -1,24 +1,21 @@
-import {
-  defineConfig,
-  globalIgnores,
-} from "eslint/config";
+import type { Linter } from "eslint";
+import sonarjs from "eslint-plugin-sonarjs";
+import tseslint from "typescript-eslint";
 
-import nextVitals from
-  "eslint-config-next/core-web-vitals";
-
-import nextTs from
-  "eslint-config-next/typescript";
-
-import sonarjs from
-  "eslint-plugin-sonarjs";
-
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-
+export const codeAnalysisConfig: Linter.Config[] = [
   {
+    files: [
+      "**/*.{js,jsx,ts,tsx}",
+    ],
+
     plugins: {
       sonarjs,
+      "@typescript-eslint":
+        tseslint.plugin,
+    },
+
+    languageOptions: {
+      parser: tseslint.parser,
     },
 
     rules: {
@@ -83,18 +80,4 @@ const eslintConfig = defineConfig([
         "warn",
     },
   },
-
-  // =========================
-  // Global ignores
-  // =========================
-
-  globalIgnores([
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    "node_modules/**",
-  ]),
-]);
-
-export default eslintConfig;
+];

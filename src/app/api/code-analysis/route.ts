@@ -1,3 +1,4 @@
+import { codeAnalysisConfig } from "@/lib/code-analysis/eslint-config";
 import { ESLint } from "eslint";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -55,10 +56,11 @@ export async function POST(
       });
     }
 
-    const eslint = new ESLint({
-      overrideConfigFile: "eslint.config.mjs",
-      fix: Boolean(body.fix),
-    });
+const eslint = new ESLint({
+  overrideConfigFile: true,
+  overrideConfig: codeAnalysisConfig,
+  fix: Boolean(body.fix),
+});
 
     const results = await eslint.lintText(
       body.code,
