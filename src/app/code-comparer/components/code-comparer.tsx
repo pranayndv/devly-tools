@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import {
   Check,
@@ -8,19 +8,52 @@ import {
   FileDiff,
   FolderOpen,
   RefreshCw,
+  ScanSearch,
   Settings2,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react";
-
 import { DiffEditor, DiffOnMount } from "@monaco-editor/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as Monaco from "monaco-editor";
 import { detectLanguage, LANGUAGES } from "@/lib/languages";
 
 type Side = "original" | "modified";
-
 type ChangeType = "added" | "removed" | "modified";
+type SonarSeverity = "error" | "warning" | "info";
+
+type SonarSuggestion = {
+  message: string;
+  desc?: string;
+  output?: string;
+  range?: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  };
+};
+
+type SonarIssue = {
+  id: string;
+  rule: string;
+  message: string;
+  severity: SonarSeverity;
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+  fixable: boolean;
+  suggestions?: SonarSuggestion[];
+};
+
+type AnalysisResponse = {
+  success: boolean;
+  issues?: SonarIssue[];
+  fixedCode?: string;
+  error?: string;
+};
 
 function ChangeRow({
   type,
@@ -62,8 +95,8 @@ function getStatistics(
   modified: string,
   ignoreWhitespace: boolean,
 ) {
-  const oldLines = original.replaceAll('\r\n', "\n").split("\n");
-  const newLines = modified.replaceAll('\r\n', "\n").split("\n");
+  const oldLines = original.replaceAll("\r\n", "\n").split("\n");
+  const newLines = modified.replaceAll("\r\n", "\n").split("\n");
 
   const normalize = (line: string) =>
     ignoreWhitespace ? line.replace(/\s+/g, "") : line;
@@ -74,14 +107,12 @@ function getStatistics(
   const n = old.length;
   const m = next.length;
 
-  // LCS-based line diff gives much more useful counts than comparing
-  // line i with line i. It handles inserted/deleted lines correctly.
   const dp: number[][] = Array.from({ length: n + 1 }, () =>
     new Array<number>(m + 1).fill(0),
   );
 
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
       dp[i][j] =
         old[i] === next[j]
           ? dp[i + 1][j + 1] + 1
@@ -96,22 +127,20 @@ function getStatistics(
 
   while (i < n && j < m) {
     if (old[i] === next[j]) {
-      i++;
-      j++;
+      i += 1;
+      j += 1;
     } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      deletions++;
-      i++;
+      deletions += 1;
+      i += 1;
     } else {
-      additions++;
-      j++;
+      additions += 1;
+      j += 1;
     }
   }
 
   deletions += n - i;
   additions += m - j;
 
-  // A modified line is represented by a delete + add pair.
-  // Count paired changes separately for a cleaner UX.
   const modifications = Math.min(additions, deletions);
 
   return {
@@ -121,15 +150,26 @@ function getStatistics(
   };
 }
 
-export default function CodeComparer() {
-  const [original, setOriginal] = useState('');
-  const [modified, setModified] = useState('');
+function severityClass(severity: SonarSeverity) {
+  if (severity === "error") return "bg-red-400";
+  if (severity === "warning") return "bg-amber-400";
+  return "bg-blue-400";
+}
 
+export default function CodeComparer() {
+  const [original, setOriginal] = useState("");
+  const [modified, setModified] = useState("");
   const [language, setLanguage] = useState("javascript");
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState<Side | null>(null);
   const [activeSide, setActiveSide] = useState<Side>("modified");
+
+  const [sonarOpen, setSonarOpen] = useState(false);
+  const [sonarSide, setSonarSide] = useState<Side>("modified");
+  const [sonarIssues, setSonarIssues] = useState<SonarIssue[]>([]);
+  const [sonarAnalyzing, setSonarAnalyzing] = useState(false);
+  const [sonarError, setSonarError] = useState<string | null>(null);
 
   const diffEditorRef =
     useRef<Monaco.editor.IStandaloneDiffEditor | null>(null);
@@ -140,24 +180,188 @@ export default function CodeComparer() {
 
   const originalFileInput = useRef<HTMLInputElement | null>(null);
   const modifiedFileInput = useRef<HTMLInputElement | null>(null);
-
   const listenersRef = useRef<Monaco.IDisposable[]>([]);
   const syncLockRef = useRef(false);
+  const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const statistics = useMemo(
     () => getStatistics(original, modified, ignoreWhitespace),
     [original, modified, ignoreWhitespace],
   );
 
+  const sonarCount = sonarIssues.length;
+  const sonarErrors = sonarIssues.filter((item) => item.severity === "error").length;
+  const sonarWarnings = sonarIssues.filter((item) => item.severity === "warning").length;
+
   useEffect(() => {
     return () => {
       listenersRef.current.forEach((listener) => listener.dispose());
       listenersRef.current = [];
+
+      if (analysisTimerRef.current) {
+        clearTimeout(analysisTimerRef.current);
+      }
     };
   }, []);
 
-  const handleEditorMount: DiffOnMount = (editor) => {
+  function clearSonarMarkers(
+    editor: Monaco.editor.IStandaloneCodeEditor | null,
+  ) {
+    const monaco = (globalThis as typeof globalThis & {
+      __devlyMonaco?: typeof Monaco;
+    }).__devlyMonaco;
+
+    const model = editor?.getModel();
+
+    if (!monaco || !model) return;
+
+    monaco.editor.setModelMarkers(model, "devly-sonar", []);
+  }
+
+  function applySonarMarkers(
+    editor: Monaco.editor.IStandaloneCodeEditor,
+    issues: SonarIssue[],
+    monaco: typeof Monaco,
+  ) {
+    const model = editor.getModel();
+
+    if (!model) return;
+
+    monaco.editor.setModelMarkers(
+      model,
+      "devly-sonar",
+      issues.map((issue) => ({
+        startLineNumber: issue.startLineNumber,
+        startColumn: issue.startColumn,
+        endLineNumber: issue.endLineNumber,
+        endColumn: issue.endColumn,
+        message: `${issue.message}\n\nRule: ${issue.rule}`,
+        severity:
+          issue.severity === "error"
+            ? monaco.MarkerSeverity.Error
+            : issue.severity === "warning"
+              ? monaco.MarkerSeverity.Warning
+              : monaco.MarkerSeverity.Info,
+        code: issue.rule,
+        source: "SonarJS / ESLint",
+      })),
+    );
+  }
+
+  async function analyzeCode(
+    code: string,
+    currentLanguage: string,
+    fix = false,
+  ): Promise<AnalysisResponse> {
+    const response = await fetch("/api/code-analysis", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        code,
+        language: currentLanguage,
+        fix,
+      }),
+    });
+
+    const data = (await response.json()) as AnalysisResponse;
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error ?? "Code analysis failed.");
+    }
+
+    return data;
+  }
+
+  async function analyzeEditor(
+    side: Side,
+    fix = false,
+  ) {
+    const editor =
+      side === "original"
+        ? originalEditorRef.current
+        : modifiedEditorRef.current;
+
+    if (!editor) return;
+
+    const model = editor.getModel();
+
+    if (!model) return;
+
+    const monaco = (globalThis as typeof globalThis & {
+      __devlyMonaco?: typeof Monaco;
+    }).__devlyMonaco;
+
+    if (!monaco) return;
+
+    setSonarAnalyzing(true);
+    setSonarSide(side);
+    setSonarOpen(true);
+    setSonarError(null);
+
+    try {
+      const result = await analyzeCode(
+        model.getValue(),
+        language,
+        fix,
+      );
+
+      const issues = result.issues ?? [];
+
+      if (fix && result.fixedCode !== undefined) {
+        const currentCode = model.getValue();
+
+        if (result.fixedCode !== currentCode) {
+          syncLockRef.current = true;
+          model.setValue(result.fixedCode);
+
+          if (side === "original") {
+            setOriginal(result.fixedCode);
+          } else {
+            setModified(result.fixedCode);
+          }
+
+          window.setTimeout(() => {
+            syncLockRef.current = false;
+          }, 0);
+        }
+      }
+
+      setSonarIssues(issues);
+      applySonarMarkers(editor, issues, monaco);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Code analysis failed.";
+
+      setSonarError(message);
+      setSonarIssues([]);
+      clearSonarMarkers(editor);
+    } finally {
+      setSonarAnalyzing(false);
+    }
+  }
+
+  function scheduleAnalysis(side: Side) {
+    if (analysisTimerRef.current) {
+      clearTimeout(analysisTimerRef.current);
+    }
+
+    analysisTimerRef.current = setTimeout(() => {
+      void analyzeEditor(side);
+    }, 800);
+  }
+
+const handleEditorMount: DiffOnMount = (editor, monaco) => {
     diffEditorRef.current = editor;
+
+    (
+      globalThis as typeof globalThis & {
+        __devlyMonaco?: typeof Monaco;
+      }
+    ).__devlyMonaco = monaco as typeof Monaco;
 
     const originalEditor = editor.getOriginalEditor();
     const modifiedEditor = editor.getModifiedEditor();
@@ -175,7 +379,12 @@ export default function CodeComparer() {
       listenersRef.current.push(
         originalModel.onDidChangeContent(() => {
           if (syncLockRef.current) return;
-          setOriginal(originalModel.getValue());
+
+          const value = originalModel.getValue();
+          setOriginal(value);
+          clearSonarMarkers(originalEditor);
+          setSonarIssues([]);
+          scheduleAnalysis("original");
         }),
       );
     }
@@ -184,14 +393,23 @@ export default function CodeComparer() {
       listenersRef.current.push(
         modifiedModel.onDidChangeContent(() => {
           if (syncLockRef.current) return;
-          setModified(modifiedModel.getValue());
+
+          const value = modifiedModel.getValue();
+          setModified(value);
+          clearSonarMarkers(modifiedEditor);
+          setSonarIssues([]);
+          scheduleAnalysis("modified");
         }),
       );
     }
 
     listenersRef.current.push(
-      originalEditor.onDidFocusEditorText(() => setActiveSide("original")),
-      modifiedEditor.onDidFocusEditorText(() => setActiveSide("modified")),
+      originalEditor.onDidFocusEditorText(() => {
+        setActiveSide("original");
+      }),
+      modifiedEditor.onDidFocusEditorText(() => {
+        setActiveSide("modified");
+      }),
     );
   };
 
@@ -224,6 +442,15 @@ export default function CodeComparer() {
     setOriginal(currentModified);
     setModified(currentOriginal);
     setActiveSide("modified");
+    setSonarIssues([]);
+
+    if (originalEditorRef.current) {
+      clearSonarMarkers(originalEditorRef.current);
+    }
+
+    if (modifiedEditorRef.current) {
+      clearSonarMarkers(modifiedEditorRef.current);
+    }
 
     window.setTimeout(() => {
       syncLockRef.current = false;
@@ -238,62 +465,144 @@ export default function CodeComparer() {
 
     setOriginal("");
     setModified("");
+    setSonarIssues([]);
+    setSonarError(null);
+
+    clearSonarMarkers(originalEditorRef.current);
+    clearSonarMarkers(modifiedEditorRef.current);
 
     window.setTimeout(() => {
       syncLockRef.current = false;
     }, 0);
   }
 
-function handleFileSelected(
-  event: React.ChangeEvent<HTMLInputElement>,
-  side: Side,
-) {
-  const file = event.target.files?.[0];
+  function handleFileSelected(
+    event: React.ChangeEvent<HTMLInputElement>,
+    side: Side,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
 
-  event.target.value = "";
+    if (!file) return;
 
-  if (!file) {
-    return;
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const content =
+        typeof reader.result === "string"
+          ? reader.result
+          : "";
+
+      syncLockRef.current = true;
+
+      if (side === "original") {
+        originalEditorRef.current
+          ?.getModel()
+          ?.setValue(content);
+
+        setOriginal(content);
+      } else {
+        modifiedEditorRef.current
+          ?.getModel()
+          ?.setValue(content);
+
+        setModified(content);
+      }
+
+      setLanguage(detectLanguage(file.name));
+      setActiveSide(side);
+      setSonarIssues([]);
+      setSonarError(null);
+
+      clearSonarMarkers(
+        side === "original"
+          ? originalEditorRef.current
+          : modifiedEditorRef.current,
+      );
+
+      window.setTimeout(() => {
+        syncLockRef.current = false;
+        void analyzeEditor(side);
+      }, 0);
+    };
+
+    reader.readAsText(file);
   }
 
-  const reader = new FileReader();
+  function handleSonarClick() {
+    const side = activeSide;
+    setSonarSide(side);
+    setSonarOpen(true);
+    void analyzeEditor(side);
+  }
 
-  reader.onload = () => {
-    const content =
-      typeof reader.result === "string"
-        ? reader.result
-        : "";
+  function handleIssueClick(issue: SonarIssue) {
+    const editor =
+      sonarSide === "original"
+        ? originalEditorRef.current
+        : modifiedEditorRef.current;
+
+    if (!editor) return;
+
+    editor.revealLineInCenter(issue.startLineNumber);
+    editor.setPosition({
+      lineNumber: issue.startLineNumber,
+      column: issue.startColumn,
+    });
+    editor.focus();
+  }
+
+  async function handleFixAll() {
+    await analyzeEditor(sonarSide, true);
+  }
+
+  async function handleFixIssue(
+    issue: SonarIssue,
+  ) {
+    const suggestion = issue.suggestions?.[0];
+
+    if (!suggestion?.range || suggestion.output === undefined) {
+      await analyzeEditor(sonarSide, true);
+      return;
+    }
+
+    const editor =
+      sonarSide === "original"
+        ? originalEditorRef.current
+        : modifiedEditorRef.current;
+
+    if (!editor) return;
+
+    const model = editor.getModel();
+
+    if (!model) return;
 
     syncLockRef.current = true;
 
-    if (side === "original") {
-      originalEditorRef.current
-        ?.getModel()
-        ?.setValue(content);
-
-      setOriginal(content);
-    } else {
-      modifiedEditorRef.current
-        ?.getModel()
-        ?.setValue(content);
-
-      setModified(content);
-    }
-
-    // Detect from the actual filename.
-    setLanguage(
-      detectLanguage(file.name),
+    model.pushEditOperations(
+      [],
+      [
+        {
+          range: suggestion.range,
+          text: suggestion.output,
+        },
+      ],
+      () => null,
     );
 
-    setActiveSide(side);
+    const value = model.getValue();
+
+    if (sonarSide === "original") {
+      setOriginal(value);
+    } else {
+      setModified(value);
+    }
 
     window.setTimeout(() => {
       syncLockRef.current = false;
+      void analyzeEditor(sonarSide);
     }, 0);
-  };
-
-  reader.readAsText(file);
-}
+  }
 
   const editorOptions: Monaco.editor.IStandaloneDiffEditorConstructionOptions = {
     readOnly: false,
@@ -315,7 +624,8 @@ function handleFileSelected(
 
     fontSize: 13,
     lineHeight: 21,
-    fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+    fontFamily:
+      "'JetBrains Mono', Consolas, 'Courier New', monospace",
 
     padding: {
       top: 12,
@@ -343,7 +653,7 @@ function handleFileSelected(
     lineNumbersMinChars: 3,
 
     contextmenu: true,
-    glyphMargin: false,
+    glyphMargin: true,
     links: true,
     mouseWheelZoom: true,
 
@@ -389,11 +699,13 @@ function handleFileSelected(
             label="Additions"
             value={statistics.additions}
           />
+
           <ChangeRow
             type="removed"
             label="Deletions"
             value={statistics.deletions}
           />
+
           <ChangeRow
             type="modified"
             label="Modified"
@@ -402,12 +714,35 @@ function handleFileSelected(
         </div>
 
         <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleSonarClick}
+            className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] transition ${
+              sonarOpen
+                ? "bg-violet-500/10 text-violet-300"
+                : "text-zinc-500 hover:bg-[#171a1f] hover:text-zinc-200"
+            }`}
+            title="Analyze active editor with SonarJS / ESLint"
+          >
+            <ScanSearch size={14} />
+            <span className="hidden md:block">
+              Sonar
+            </span>
+
+            {sonarCount > 0 && (
+              <span className="rounded-full bg-violet-500/15 px-1.5 text-[8px] text-violet-300">
+                {sonarCount}
+              </span>
+            )}
+          </button>
+
           <div className="relative mr-1">
             <select
               value={language}
-              onChange={(event) =>
-                setLanguage(event.target.value)
-              }
+              onChange={(event) => {
+                setLanguage(event.target.value);
+                setSonarIssues([]);
+              }}
               className="h-8 max-w-31.25 appearance-none rounded-lg border border-[#282c32] bg-[#111419] pl-3 pr-8 text-[10px] text-zinc-400 outline-none transition hover:border-[#383d46] focus:border-violet-500/40"
             >
               {LANGUAGES.map((item) => (
@@ -429,7 +764,9 @@ function handleFileSelected(
 
           <button
             type="button"
-            onClick={() => setSettingsOpen((value) => !value)}
+            onClick={() =>
+              setSettingsOpen((value) => !value)
+            }
             className={`grid h-8 w-8 place-items-center rounded-lg transition ${
               settingsOpen
                 ? "bg-[#191c22] text-zinc-100"
@@ -447,7 +784,9 @@ function handleFileSelected(
             title="Swap current code"
           >
             <RefreshCw size={14} />
-            <span className="hidden md:block">Swap</span>
+            <span className="hidden md:block">
+              Swap
+            </span>
           </button>
 
           <button
@@ -457,7 +796,9 @@ function handleFileSelected(
             title="Clear both editors"
           >
             <Trash2 size={14} />
-            <span className="hidden md:block">Clear</span>
+            <span className="hidden md:block">
+              Clear
+            </span>
           </button>
         </div>
       </header>
@@ -499,8 +840,7 @@ function handleFileSelected(
             </label>
 
             <div className="mt-1 rounded-lg border border-[#202329] bg-[#0d0f13] px-2.5 py-2 text-[9px] leading-4 text-zinc-600">
-              Validation markers are disabled. The comparer focuses on
-              differences, not code errors.
+              SonarJS / ESLint analysis is enabled for JavaScript and TypeScript.
             </div>
           </div>
         </>
@@ -531,7 +871,9 @@ function handleFileSelected(
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => originalFileInput.current?.click()}
+                  onClick={() =>
+                    originalFileInput.current?.click()
+                  }
                   className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 transition hover:bg-[#1a1d22] hover:text-zinc-200"
                   title="Open original file"
                 >
@@ -540,7 +882,9 @@ function handleFileSelected(
 
                 <button
                   type="button"
-                  onClick={() => handleCopy("original")}
+                  onClick={() =>
+                    handleCopy("original")
+                  }
                   className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 transition hover:bg-[#1a1d22] hover:text-zinc-200"
                   title="Copy original"
                 >
@@ -559,7 +903,10 @@ function handleFileSelected(
                   type="file"
                   hidden
                   onChange={(event) =>
-                    handleFileSelected(event, "original")
+                    handleFileSelected(
+                      event,
+                      "original",
+                    )
                   }
                 />
               </div>
@@ -587,7 +934,9 @@ function handleFileSelected(
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => modifiedFileInput.current?.click()}
+                  onClick={() =>
+                    modifiedFileInput.current?.click()
+                  }
                   className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 transition hover:bg-[#1a1d22] hover:text-zinc-200"
                   title="Open modified file"
                 >
@@ -596,7 +945,9 @@ function handleFileSelected(
 
                 <button
                   type="button"
-                  onClick={() => handleCopy("modified")}
+                  onClick={() =>
+                    handleCopy("modified")
+                  }
                   className="grid h-7 w-7 place-items-center rounded-md text-zinc-600 transition hover:bg-[#1a1d22] hover:text-zinc-200"
                   title="Copy modified"
                 >
@@ -615,7 +966,10 @@ function handleFileSelected(
                   type="file"
                   hidden
                   onChange={(event) =>
-                    handleFileSelected(event, "modified")
+                    handleFileSelected(
+                      event,
+                      "modified",
+                    )
                   }
                 />
               </div>
@@ -637,6 +991,148 @@ function handleFileSelected(
               }
             />
           </div>
+
+          {sonarOpen && (
+            <aside className="max-h-64 shrink-0 overflow-hidden border-t border-[#282c32] bg-[#0d0f13]">
+              <div className="flex h-9 items-center justify-between border-b border-[#202329] px-3">
+                <div className="flex items-center gap-2">
+                  <ScanSearch
+                    size={13}
+                    className="text-violet-400"
+                  />
+
+                  <span className="text-[10px] font-semibold text-zinc-300">
+                    SonarJS / ESLint
+                  </span>
+
+                  <span className="text-[8px] text-zinc-600">
+                    {sonarSide}
+                  </span>
+
+                  {sonarErrors > 0 && (
+                    <span className="rounded bg-red-400/10 px-1.5 py-0.5 text-[8px] text-red-300">
+                      {sonarErrors} errors
+                    </span>
+                  )}
+
+                  {sonarWarnings > 0 && (
+                    <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[8px] text-amber-300">
+                      {sonarWarnings} warnings
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void analyzeEditor(sonarSide)
+                    }
+                    disabled={sonarAnalyzing}
+                    className="grid h-6 w-6 place-items-center rounded-md text-zinc-600 transition hover:bg-[#191c21] hover:text-zinc-300 disabled:opacity-30"
+                    title="Run analysis again"
+                  >
+                    <RefreshCw
+                      size={11}
+                      className={
+                        sonarAnalyzing
+                          ? "animate-spin"
+                          : ""
+                      }
+                    />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSonarOpen(false)
+                    }
+                    className="grid h-6 w-6 place-items-center rounded-md text-zinc-600 transition hover:bg-[#191c21] hover:text-zinc-300"
+                    title="Close Sonar panel"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-55 overflow-y-auto">
+                {sonarError && (
+                  <div className="border-b border-red-500/10 bg-red-500/5 px-3 py-2 text-[9px] text-red-300">
+                    {sonarError}
+                  </div>
+                )}
+
+                {sonarAnalyzing && (
+                  <div className="flex items-center gap-2 px-3 py-3 text-[9px] text-zinc-600">
+                    <RefreshCw
+                      size={11}
+                      className="animate-spin"
+                    />
+                    Analyzing code...
+                  </div>
+                )}
+
+                {!sonarAnalyzing &&
+                  !sonarError &&
+                  sonarIssues.length === 0 && (
+                    <div className="flex items-center gap-2 px-3 py-4 text-[9px] text-emerald-400/70">
+                      <Check size={12} />
+                      No SonarJS / ESLint issues found.
+                    </div>
+                  )}
+
+                {sonarIssues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className="border-b border-[#181b20]"
+                  >
+                    <div className="flex items-start gap-2 px-3 py-2">
+                      <span
+                        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${severityClass(
+                          issue.severity,
+                        )}`}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleIssueClick(issue)
+                        }
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <span className="block text-[9px] leading-4 text-zinc-300">
+                          {issue.message}
+                        </span>
+
+                        <span className="mt-0.5 block text-[8px] text-zinc-600">
+                          {issue.rule}
+                          {" · Line "}
+                          {issue.startLineNumber}
+                          {":"}
+                          {issue.startColumn}
+                        </span>
+                      </button>
+
+                      {(issue.fixable ||
+                        issue.suggestions?.length) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleFixIssue(
+                              issue,
+                            )
+                          }
+                          className="shrink-0 rounded-md bg-violet-500/10 px-2 py-1 text-[8px] text-violet-300 transition hover:bg-violet-500/20"
+                        >
+                          Fix
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          )}
 
           <div className="flex h-7 shrink-0 items-center justify-between border-t border-[#24272d] bg-[#0b0d10] px-3">
             <div className="flex min-w-0 items-center gap-3">
