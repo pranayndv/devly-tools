@@ -297,7 +297,7 @@ export default function CodeComparer() {
 
     setSonarAnalyzing(true);
     setSonarSide(side);
-    setSonarOpen(false);
+    setSonarOpen(true);
     setSonarError(null);
 
     try {
