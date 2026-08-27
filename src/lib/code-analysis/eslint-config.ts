@@ -1,7 +1,6 @@
 import type { Linter } from "eslint";
 import sonarjs from "eslint-plugin-sonarjs";
 import tseslint from "typescript-eslint";
-import tailwindcss from "eslint-plugin-tailwindcss";
 
 const sonarRules: Record<string, Linter.RuleEntry> = {
   "sonarjs/no-all-duplicated-branches": "warn",
@@ -176,25 +175,6 @@ const generalRules: Record<
   "valid-typeof": "error",
 };
 
-const tailwindRules: Record<
-  string,
-  Linter.RuleEntry
-> = {
-  "tailwindcss/classnames-order": "warn",
-
-  "tailwindcss/no-contradicting-classname":
-    "warn",
-
-  "tailwindcss/no-custom-classname":
-    "off",
-
-  "tailwindcss/enforces-negative-arbitrary-values":
-    "warn",
-
-  "tailwindcss/migration-from-tailwind-2":
-    "off",
-};
-
 /*
  * IMPORTANT
  *
@@ -229,20 +209,6 @@ export const codeAnalysisConfig =
         ...sonarRules,
         ...typeScriptRules,
         ...generalRules,
-      },
-    },
-
-    {
-      files: [
-        "**/*.{html,htm,js,jsx,ts,tsx}",
-      ],
-
-      plugins: {
-        tailwindcss,
-      },
-
-      rules: {
-        ...tailwindRules,
       },
     },
   ] as unknown as Linter.Config[];
