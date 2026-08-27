@@ -92,8 +92,6 @@ export const codeAnalysisConfig: Linter.Config[] = [
       "sonarjs/no-reference-error":
         "warn",
 
-      "sonarjs/no-similar-functions":
-        "warn",
 
       "sonarjs/no-single-iteration":
         "warn",
