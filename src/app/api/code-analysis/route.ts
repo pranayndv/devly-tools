@@ -119,8 +119,7 @@ export async function POST(
         suggestions:
           message.suggestions?.map(
             (suggestion) => ({
-              message:
-                suggestion.message,
+              message: suggestion.desc ?? suggestion.messageId,
 
               desc:
                 suggestion.desc,
