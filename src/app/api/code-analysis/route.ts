@@ -68,13 +68,13 @@ function createESLint(
     "sonarjs/no-identical-functions":
       "warn",
 
-    "sonarjs/no-inconsistent-return":
-      "warn",
-
     "sonarjs/no-nested-switch":
       "warn",
 
     "sonarjs/no-small-switch":
+      "warn",
+
+    "consistent-return":
       "warn",
   } satisfies Linter.RulesRecord;
 
