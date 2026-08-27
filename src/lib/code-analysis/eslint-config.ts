@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 
 const sonarRules: Record<string, Linter.RuleEntry> =
   Object.fromEntries(
-   Object.keys(sonarjs.rules ?? {}).map((ruleName) => [
+    Object.keys(sonarjs.rules ?? {}).map((ruleName) => [
       `sonarjs/${ruleName}`,
       "warn",
     ]),
@@ -25,62 +25,42 @@ const typeScriptRules: Record<
     },
   ],
 
-  "@typescript-eslint/no-non-null-assertion":
-    "warn",
+  "@typescript-eslint/no-non-null-assertion": "warn",
 
-  "@typescript-eslint/no-inferrable-types":
-    "warn",
+  "@typescript-eslint/no-inferrable-types": "warn",
 
-  "@typescript-eslint/no-duplicate-enum-values":
-    "warn",
+  "@typescript-eslint/no-duplicate-enum-values": "warn",
 
-  "@typescript-eslint/no-duplicate-type-constituents":
-    "warn",
+  "@typescript-eslint/no-empty-object-type": "warn",
 
-  "@typescript-eslint/no-empty-object-type":
-    "warn",
+  "@typescript-eslint/no-extra-non-null-assertion": "warn",
 
-  "@typescript-eslint/no-extra-non-null-assertion":
-    "warn",
+  "@typescript-eslint/no-misused-new": "warn",
 
-  "@typescript-eslint/no-misused-new":
-    "warn",
+  "@typescript-eslint/array-type": "warn",
 
-  "@typescript-eslint/no-redundant-type-constituents":
-    "warn",
+  "@typescript-eslint/consistent-type-assertions": "warn",
 
-  "@typescript-eslint/array-type":
+  "@typescript-eslint/consistent-type-definitions": [
     "warn",
+    "interface",
+  ],
 
-  "@typescript-eslint/consistent-type-assertions":
-    "warn",
+  "@typescript-eslint/consistent-type-imports": "warn",
 
-  "@typescript-eslint/consistent-type-definitions":
-    ["warn", "interface"],
+  "@typescript-eslint/method-signature-style": "warn",
 
-  "@typescript-eslint/consistent-type-imports":
-    "warn",
+  "@typescript-eslint/prefer-as-const": "warn",
 
-  "@typescript-eslint/method-signature-style":
-    "warn",
+  "@typescript-eslint/prefer-enum-initializers": "warn",
 
-  "@typescript-eslint/prefer-as-const":
-    "warn",
+  "@typescript-eslint/prefer-for-of": "warn",
 
-  "@typescript-eslint/prefer-enum-initializers":
-    "warn",
+  "@typescript-eslint/prefer-function-type": "warn",
 
-  "@typescript-eslint/prefer-for-of":
-    "warn",
+  "@typescript-eslint/prefer-namespace-keyword": "warn",
 
-  "@typescript-eslint/prefer-function-type":
-    "warn",
-
-  "@typescript-eslint/prefer-namespace-keyword":
-    "warn",
-
-  "@typescript-eslint/prefer-literal-enum-member":
-    "warn",
+  "@typescript-eslint/prefer-literal-enum-member": "warn",
 };
 
 const generalRules: Record<
@@ -90,7 +70,7 @@ const generalRules: Record<
   "no-console": "warn",
   "no-debugger": "warn",
   "no-eval": "error",
-  "eqeqeq": "warn",
+  eqeqeq: "warn",
   "prefer-const": "warn",
   "no-var": "warn",
   "no-duplicate-imports": "warn",
@@ -137,17 +117,31 @@ const generalRules: Record<
 
 export const codeAnalysisConfig =
   [
-    ...tseslint.configs.recommended,
-
+    // ==========================================
+    // JavaScript / JSX
+    // ==========================================
     {
-      files: [
-        "**/*.{js,jsx,ts,tsx}",
-      ],
+      files: ["**/*.{js,jsx}"],
 
       plugins: {
         sonarjs,
-        "@typescript-eslint":
-          tseslint.plugin,
+      },
+
+      rules: {
+        ...sonarRules,
+        ...generalRules,
+      },
+    },
+
+    // ==========================================
+    // TypeScript / TSX
+    // ==========================================
+    {
+      files: ["**/*.{ts,tsx}"],
+
+      plugins: {
+        sonarjs,
+        "@typescript-eslint": tseslint.plugin,
       },
 
       languageOptions: {
@@ -156,8 +150,8 @@ export const codeAnalysisConfig =
 
       rules: {
         ...sonarRules,
-        ...typeScriptRules,
         ...generalRules,
+        ...typeScriptRules,
       },
     },
   ] as unknown as Linter.Config[];
