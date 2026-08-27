@@ -253,7 +253,7 @@ export default function CodeComparer() {
     currentLanguage: string,
     fix = false,
   ): Promise<AnalysisResponse> {
-    const response = await fetch("/api/code-analysis", {
+    const response = await fetch(process.env.NEXT_PUBLIC_APP_URL+"/api/code-analysis", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
