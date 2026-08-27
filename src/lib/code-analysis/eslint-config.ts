@@ -2,54 +2,13 @@ import type { Linter } from "eslint";
 import sonarjs from "eslint-plugin-sonarjs";
 import tseslint from "typescript-eslint";
 
-const sonarRules: Record<string, Linter.RuleEntry> = {
-  "sonarjs/no-all-duplicated-branches": "warn",
-  "sonarjs/no-duplicate-string": "warn",
-  "sonarjs/no-identical-functions": "warn",
-  "sonarjs/no-nested-switch": "warn",
-  "sonarjs/no-small-switch": "warn",
-  "sonarjs/cognitive-complexity": ["warn", 15],
-  "sonarjs/max-switch-cases": ["warn", 30],
-  "sonarjs/no-collapsible-if": "warn",
-  "sonarjs/no-collection-size-mischeck": "warn",
-  "sonarjs/no-duplicated-branches": "warn",
-  "sonarjs/no-element-overwrite": "warn",
-  "sonarjs/no-empty-collection": "warn",
-  "sonarjs/no-extra-arguments": "warn",
-  "sonarjs/no-gratuitous-expressions": "warn",
-  "sonarjs/no-identical-conditions": "warn",
-  "sonarjs/no-ignored-return": "warn",
-  "sonarjs/no-incomplete-assertion": "warn",
-  "sonarjs/no-inconsistent-returns": "warn",
-  "sonarjs/no-invalid-regexp": "warn",
-  "sonarjs/no-invariant-returns": "warn",
-  "sonarjs/no-misleading-array-reverse": "warn",
-  "sonarjs/no-misleading-character-class": "warn",
-  "sonarjs/no-nested-template-literals": "warn",
-  "sonarjs/no-redundant-assignments": "warn",
-  "sonarjs/no-redundant-optional": "warn",
-  "sonarjs/no-redundant-parentheses": "warn",
-  "sonarjs/no-redundant-type-constituents": "warn",
-  "sonarjs/no-reference-error": "warn",
-  "sonarjs/no-similar-functions": "warn",
-  "sonarjs/no-single-iteration": "warn",
-  "sonarjs/no-skipped-tests": "warn",
-  "sonarjs/no-tabindex": "warn",
-  "sonarjs/no-template-curly-in-string": "warn",
-  "sonarjs/no-try-promise": "warn",
-  "sonarjs/no-undefined-argument": "warn",
-  "sonarjs/no-unthrown-error": "warn",
-  "sonarjs/no-useless-intersection": "warn",
-  "sonarjs/no-useless-react-setstate": "warn",
-  "sonarjs/no-variable-usage-before-declaration": "warn",
-  "sonarjs/prefer-immediate-return": "warn",
-  "sonarjs/prefer-object-literal": "warn",
-  "sonarjs/prefer-regexp-exec": "warn",
-  "sonarjs/prefer-single-boolean-return": "warn",
-  "sonarjs/slow-regex": "warn",
-  "sonarjs/too-many-break-or-continue-in-loop": "warn",
-  "sonarjs/unused-import": "warn",
-};
+const sonarRules: Record<string, Linter.RuleEntry> =
+  Object.fromEntries(
+   Object.keys(sonarjs.rules ?? {}).map((ruleName) => [
+      `sonarjs/${ruleName}`,
+      "warn",
+    ]),
+  );
 
 const typeScriptRules: Record<
   string,
@@ -135,6 +94,7 @@ const generalRules: Record<
   "prefer-const": "warn",
   "no-var": "warn",
   "no-duplicate-imports": "warn",
+
   "no-unreachable": "error",
   "no-constant-condition": "warn",
   "no-self-assign": "warn",
@@ -174,17 +134,6 @@ const generalRules: Record<
   "use-isnan": "warn",
   "valid-typeof": "error",
 };
-
-/*
- * IMPORTANT
- *
- * The plugins have slightly different ESLint type
- * definitions depending on their installed versions.
- *
- * We deliberately cast the final configuration at
- * the ESLint boundary instead of allowing TypeScript
- * to infer a union of incompatible plugin types.
- */
 
 export const codeAnalysisConfig =
   [
