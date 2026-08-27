@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "diff": "^9.0.0",
+    "lucide-react": "^1.34.0",
+    "monaco-editor": "^0.56.0",
     "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
