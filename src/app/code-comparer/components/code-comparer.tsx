@@ -159,7 +159,7 @@ function severityClass(severity: SonarSeverity) {
 export default function CodeComparer() {
   const [original, setOriginal] = useState("");
   const [modified, setModified] = useState("");
-  const [language, setLanguage] = useState("typescript");
+  const [language, setLanguage] = useState("");
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState<Side | null>(null);
@@ -297,7 +297,7 @@ export default function CodeComparer() {
 
     setSonarAnalyzing(true);
     setSonarSide(side);
-    setSonarOpen(true);
+    setSonarOpen(false);
     setSonarError(null);
 
     try {
