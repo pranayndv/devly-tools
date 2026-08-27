@@ -1,5 +1,7 @@
-import { ESLint } from "eslint";
+import { ESLint, Linter } from "eslint";
 import { NextRequest, NextResponse } from "next/server";
+import sonarjs from "eslint-plugin-sonarjs";
+import tseslint from "typescript-eslint";
 
 export const runtime = "nodejs";
 
@@ -24,6 +26,96 @@ function severity(
   return "info";
 }
 
+function getLineColumn(
+  source: string,
+  offset: number,
+) {
+  const safeOffset = Math.max(
+    0,
+    Math.min(offset, source.length),
+  );
+
+  const before = source.slice(
+    0,
+    safeOffset,
+  );
+
+  const lines = before.split(/\r?\n/);
+
+  const lastLine = lines.at(-1) ?? "";
+
+  return {
+    line: lines.length,
+    column: lastLine.length + 1,
+  };
+}
+
+function createESLint(
+  language: string,
+  fix: boolean,
+) {
+  const isTypeScript =
+    language === "typescript" ||
+    language === "typescriptreact";
+
+  const rules = {
+    "sonarjs/no-all-duplicated-branches":
+      "warn",
+
+    "sonarjs/no-duplicate-string":
+      "warn",
+
+    "sonarjs/no-identical-functions":
+      "warn",
+
+    "sonarjs/no-inconsistent-return":
+      "warn",
+
+    "sonarjs/no-nested-switch":
+      "warn",
+
+    "sonarjs/no-small-switch":
+      "warn",
+  } satisfies Linter.RulesRecord;
+
+  const config: Linter.Config[] = [
+    {
+      files: [
+        isTypeScript
+          ? "**/*.{ts,tsx}"
+          : "**/*.{js,jsx}",
+      ],
+
+      plugins: {
+        sonarjs,
+      },
+
+      rules,
+    },
+  ];
+
+  if (isTypeScript) {
+    config.push({
+      files: ["**/*.{ts,tsx}"],
+
+      plugins: {
+        "@typescript-eslint":
+          tseslint.plugin,
+      },
+
+      languageOptions: {
+        parser: tseslint.parser,
+      },
+    });
+  }
+
+  return new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: config,
+    fix,
+  });
+}
+
 export async function POST(
   request: NextRequest,
 ) {
@@ -38,34 +130,46 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid analysis request.",
+          error:
+            "Invalid analysis request.",
         },
-        { status: 400 },
+        {
+          status: 400,
+        },
       );
     }
 
     const filePath =
-      LANGUAGE_FILES[body.language];
+      LANGUAGE_FILES[
+        body.language
+      ];
 
+    /*
+     * ESLint is only used for JS/TS
+     * related languages.
+     */
     if (!filePath) {
       return NextResponse.json({
         success: true,
         issues: [],
         fixedCode: body.code,
+        errorCount: 0,
+        warningCount: 0,
       });
     }
 
-    const eslint = new ESLint({
-      overrideConfigFile: "eslint.config.mjs",
-      fix: Boolean(body.fix),
-    });
-
-    const results = await eslint.lintText(
-      body.code,
-      {
-        filePath,
-      },
+    const eslint = createESLint(
+      body.language,
+      Boolean(body.fix),
     );
+
+    const results =
+      await eslint.lintText(
+        body.code,
+        {
+          filePath,
+        },
+      );
 
     const result = results[0];
 
@@ -74,109 +178,143 @@ export async function POST(
         success: true,
         issues: [],
         fixedCode: body.code,
+        errorCount: 0,
+        warningCount: 0,
       });
     }
 
-    const issues = result.messages.map(
-      (message, index) => ({
-        id: [
-          message.ruleId ?? "unknown",
-          message.line ?? 1,
-          message.column ?? 1,
-          index,
-        ].join("-"),
+    const source =
+      result.source ?? body.code;
 
-        rule:
-          message.ruleId ??
-          "unknown",
+    const issues =
+      result.messages.map(
+        (message, index) => {
+          const suggestions =
+            message.suggestions
+              ?.filter(
+                (suggestion) =>
+                  Boolean(
+                    suggestion.fix,
+                  ),
+              )
+              .map((suggestion) => {
+                if (!suggestion.fix) {
+                  return null;
+                }
 
-        message:
-          message.message,
+                const start =
+                  getLineColumn(
+                    source,
+                    suggestion.fix
+                      .range[0],
+                  );
 
-        severity:
-          severity(message.severity),
+                const end =
+                  getLineColumn(
+                    source,
+                    suggestion.fix
+                      .range[1],
+                  );
 
-        startLineNumber:
-          message.line ?? 1,
+                return {
+                  message:
+                    suggestion.desc ??
+                    suggestion.messageId,
 
-        startColumn:
-          message.column ?? 1,
+                  desc:
+                    suggestion.desc ??
+                    suggestion.messageId,
 
-        endLineNumber:
-          message.endLine ??
-          message.line ??
-          1,
+                  output:
+                    suggestion.fix.text,
 
-        endColumn:
-          message.endColumn ??
-          (message.column
-            ? message.column + 1
-            : 2),
+                  range: {
+                    startLineNumber:
+                      start.line,
 
-        fixable:
-          Boolean(message.fix),
+                    startColumn:
+                      start.column,
 
-        suggestions:
-          message.suggestions?.map(
-            (suggestion) => ({
-              message: suggestion.desc ?? suggestion.messageId,
+                    endLineNumber:
+                      end.line,
 
-              desc:
-                suggestion.desc,
+                    endColumn:
+                      end.column,
+                  },
+                };
+              })
+              .filter(
+                (
+                  suggestion,
+                ): suggestion is NonNullable<
+                  typeof suggestion
+                > =>
+                  suggestion !== null,
+              ) ?? [];
 
-              output:
-                suggestion.fix.text,
+          return {
+            id: [
+              message.ruleId ??
+                "unknown",
 
-              range: {
-                startLineNumber:
-                  result.source
-                    ? getLineColumn(
-                        result.source,
-                        suggestion.fix.range[0],
-                      ).line
-                    : message.line ?? 1,
+              message.line ??
+                1,
 
-                startColumn:
-                  result.source
-                    ? getLineColumn(
-                        result.source,
-                        suggestion.fix.range[0],
-                      ).column
-                    : message.column ?? 1,
+              message.column ??
+                1,
 
-                endLineNumber:
-                  result.source
-                    ? getLineColumn(
-                        result.source,
-                        suggestion.fix.range[1],
-                      ).line
-                    : message.endLine ??
-                      message.line ??
-                      1,
+              index,
+            ].join("-"),
 
-                endColumn:
-                  result.source
-                    ? getLineColumn(
-                        result.source,
-                        suggestion.fix.range[1],
-                      ).column
-                    : message.endColumn ??
-                      (message.column
-                        ? message.column + 1
-                        : 2),
-              },
-            }),
-          ),
-      }),
-    );
+            rule:
+              message.ruleId ??
+              "unknown",
+
+            message:
+              message.message,
+
+            severity:
+              severity(
+                message.severity,
+              ),
+
+            startLineNumber:
+              message.line ?? 1,
+
+            startColumn:
+              message.column ?? 1,
+
+            endLineNumber:
+              message.endLine ??
+              message.line ??
+              1,
+
+            endColumn:
+              message.endColumn ??
+              (message.column
+                ? message.column + 1
+                : 2),
+
+            fixable:
+              Boolean(message.fix),
+
+            suggestions,
+          };
+        },
+      );
 
     return NextResponse.json({
       success: true,
+
       issues,
+
       fixedCode:
-        result.output ?? body.code,
+        result.output ??
+        body.code,
+
       errorCount:
         result.errorCount,
+
       warningCount:
         result.warningCount,
     });
@@ -189,34 +327,15 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
+
         error:
           error instanceof Error
             ? error.message
             : "Code analysis failed.",
       },
-      { status: 500 },
+      {
+        status: 500,
+      },
     );
   }
-}
-
-function getLineColumn(
-  source: string,
-  offset: number,
-) {
-  const safeOffset = Math.max(
-    0,
-    Math.min(offset, source.length),
-  );
-
-  const before =
-    source.slice(0, safeOffset);
-
-  const lines =
-    before.split(/\r?\n/);
-
-  return {
-    line: lines.length,
-    column:
-      lines[lines.length - 1].length + 1,
-  };
 }
