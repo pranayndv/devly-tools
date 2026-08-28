@@ -11,7 +11,6 @@ import {
   ScanSearch,
   Settings2,
   Trash2,
-  Wrench,
   X,
 } from "lucide-react";
 import { DiffEditor, DiffOnMount } from "@monaco-editor/react";
@@ -354,17 +353,12 @@ export default function CodeComparer() {
     }, 800);
   }
 
-const handleEditorMount: DiffOnMount = (editor, monaco) => {
+const handleEditorMount: DiffOnMount = (editor) => {
     diffEditorRef.current = editor;
-
-    (
-      globalThis as typeof globalThis & {
-        __devlyMonaco?: typeof Monaco;
-      }
-    ).__devlyMonaco = monaco as typeof Monaco;
 
     const originalEditor = editor.getOriginalEditor();
     const modifiedEditor = editor.getModifiedEditor();
+    
 
     originalEditorRef.current = originalEditor;
     modifiedEditorRef.current = modifiedEditor;
@@ -550,10 +544,6 @@ const handleEditorMount: DiffOnMount = (editor, monaco) => {
       column: issue.startColumn,
     });
     editor.focus();
-  }
-
-  async function handleFixAll() {
-    await analyzeEditor(sonarSide, true);
   }
 
   async function handleFixIssue(
