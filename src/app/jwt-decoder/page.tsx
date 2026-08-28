@@ -208,10 +208,6 @@ export default function Home() {
                   <div className="text-xs font-semibold text-white">
                     JWT Token
                   </div>
-
-                  <div className="text-[9px] text-neutral-600">
-                    HEADER • PAYLOAD • SIGNATURE
-                  </div>
                 </div>
               </div>
 
