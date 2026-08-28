@@ -669,18 +669,24 @@ const handleEditorMount: DiffOnMount = (editor) => {
     <main className="flex h-dvh w-full flex-col overflow-hidden bg-[#08090b] text-zinc-100">
       <header className="relative z-20 flex h-15 shrink-0 items-center justify-between border-b border-[#24272d] bg-[#0c0e11] px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-violet-400/15 bg-violet-400/10 text-violet-300">
-            <FileDiff size={18} />
-          </div>
 
-          <div className="hidden sm:block">
-            <h1 className="text-sm font-semibold tracking-tight">
-              Devly
-            </h1>
-            <p className="text-[9px] text-zinc-600">
-              Edit and compare
-            </p>
-          </div>
+                    <h1 className="text-xl font-bold tracking-tight">
+            <span className="text-white">
+              CODE
+            </span>{" "}
+            <span
+              className="
+                bg-gradient-to-r
+                from-violet-400
+                via-fuchsia-400
+                to-cyan-400
+                bg-clip-text
+                text-transparent
+              "
+            >
+              Camparer
+            </span>
+          </h1>
         </div>
 
         <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1.5 lg:flex">
@@ -971,7 +977,43 @@ const handleEditorMount: DiffOnMount = (editor) => {
               original={original}
               modified={modified}
               language={language}
-              theme="vs-dark"
+              theme="code-premium"
+                                            beforeMount={(monaco) => {
+                  monaco.editor.defineTheme("code-premium", {
+                    base: "vs-dark",
+                    inherit: true,
+
+                    rules: [
+                      {
+                        token: "jwt-header",
+                        foreground: "FF6B81",
+                      },
+                      {
+                        token: "jwt-payload",
+                        foreground: "A78BFA",
+                      },
+                      {
+                        token: "jwt-signature",
+                        foreground: "34D399",
+                      },
+                      {
+                        token: "jwt-dot",
+                        foreground: "64748B",
+                      },
+                    ],
+
+                    colors: {
+                      "editor.background": "#08080A",
+                      "editor.foreground": "#CBD5E1",
+                      "editorCursor.foreground": "#FFFFFF",
+                      "editor.selectionBackground": "#FFFFFF12",
+                      "editor.lineHighlightBackground": "#FFFFFF03",
+                      "editorLineNumber.foreground": "#3F3F46",
+                      "editorIndentGuide.background": "#FFFFFF05",
+                      "editorIndentGuide.activeBackground": "#FFFFFF08",
+                    },
+                  });
+}}
               onMount={handleEditorMount}
               options={editorOptions}
               loading={
