@@ -667,6 +667,25 @@ const handleEditorMount: DiffOnMount = (editor) => {
 
   return (
     <main className="flex h-dvh w-full flex-col overflow-hidden bg-[#08090b] text-zinc-100">
+            {/* BACKGROUND */}
+
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        
+        <div className="absolute -left-40 -top-40 h-[400px] w-[400px] rounded-full bg-violet-600/10 blur-[110px]" />
+
+        <div className="absolute right-[-120px] top-[10%] h-[350px] w-[350px] rounded-full bg-cyan-500/10 blur-[120px]" />
+
+        <div className="absolute bottom-[-200px] left-[35%] h-[400px] w-[400px] rounded-full bg-blue-600/10 blur-[130px]" />
+
+        <div
+          className="
+            absolute inset-0
+            opacity-[0.025]
+            [background-image:linear-gradient(rgba(255,255,255,.4)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.4)_1px,transparent_1px)]
+            [background-size:40px_40px]
+          "
+        />
+      </div>
       <header className="relative z-20 flex h-15 shrink-0 items-center justify-between border-b border-[#24272d] bg-[#0c0e11] px-4">
         <div className="flex min-w-0 items-center gap-3">
 

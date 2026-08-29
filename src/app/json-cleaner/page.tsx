@@ -234,30 +234,22 @@ export default function Home() {
     <main className="h-dvh overflow-hidden bg-[#07070a] text-white">
       {/* Background */}
 
-      <div className="pointer-events-none fixed inset-0">
-        <div
-          className="
-            absolute
-            -left-40
-            -top-40
-            h-[400px]
-            w-[400px]
-            rounded-full
-            bg-violet-600/10
-            blur-[120px]
-          "
-        />
+           {/* BACKGROUND */}
+
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        
+        <div className="absolute -left-40 -top-40 h-[400px] w-[400px] rounded-full bg-violet-600/10 blur-[110px]" />
+
+        <div className="absolute right-[-120px] top-[10%] h-[350px] w-[350px] rounded-full bg-cyan-500/10 blur-[120px]" />
+
+        <div className="absolute bottom-[-200px] left-[35%] h-[400px] w-[400px] rounded-full bg-blue-600/10 blur-[130px]" />
 
         <div
           className="
-            absolute
-            -right-40
-            top-20
-            h-[400px]
-            w-[400px]
-            rounded-full
-            bg-cyan-500/10
-            blur-[120px]
+            absolute inset-0
+            opacity-[0.025]
+            [background-image:linear-gradient(rgba(255,255,255,.4)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.4)_1px,transparent_1px)]
+            [background-size:40px_40px]
           "
         />
       </div>

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+
 import "./globals.css";
+
+import CommandSearchWrapper from "@/components/CommandSearchWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,16 +17,27 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Devly",
-  description: "Devly",
+  description: "Developer tools for developers",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`
+        ${geistSans.variable}
+        ${geistMono.variable}
+        h-full
+        antialiased
+      `}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <CommandSearchWrapper>
+          {children}
+        </CommandSearchWrapper>
+      </body>
     </html>
   );
 }
