@@ -30,33 +30,51 @@ const DEFAULT_JSON = `{
 }`;
 
 function cleanJsonValues(value: unknown): unknown {
+  // Array
   if (Array.isArray(value)) {
-    return [];
+    return value.map((item) =>
+      cleanJsonValues(item)
+    );
   }
 
-  if (value !== null && typeof value === "object") {
-    const result: Record<string, unknown> = {};
+  // Object
+  if (
+    value !== null &&
+    typeof value === "object"
+  ) {
+    const cleaned: Record<string, unknown> = {};
 
-    Object.entries(value).forEach(([key, childValue]) => {
-      result[key] = cleanJsonValues(childValue);
-    });
+    for (const [key, childValue] of Object.entries(
+      value
+    )) {
+      cleaned[key] =
+        cleanJsonValues(childValue);
+    }
 
-    return result;
+    return cleaned;
   }
 
+  // String
   if (typeof value === "string") {
     return "";
   }
 
-  if (
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    value === null
-  ) {
+  // Number
+  if (typeof value === "number") {
+    return 0;
+  }
+
+  // Boolean
+  if (typeof value === "boolean") {
+    return false;
+  }
+
+  // null
+  if (value === null) {
     return null;
   }
 
-  return null;
+  return value;
 }
 
 const editorOptions = {
