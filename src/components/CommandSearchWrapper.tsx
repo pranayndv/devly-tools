@@ -63,6 +63,17 @@ const defaultCommands: CommandItem[] = [
       "authentication",
     ],
   },
+    {
+    id: "aes-decrypter",
+    title: "AES Decrypter",
+    description: "Decrypt payload",
+    keywords: [
+      "Decrypt",
+      "payload",
+      "response",
+      "aes",
+    ],
+  },
   {
     id: "rgx-generator",
     title: "Regex Creator",
